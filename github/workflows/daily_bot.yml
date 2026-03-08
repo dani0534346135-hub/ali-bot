@@ -1,0 +1,30 @@
+name: AliBot Daily Send
+
+on:
+  schedule:
+    # כאן מגדירים את השעה. למשל: כל יום בשעה 08:00 בבוקר (זמן UTC)
+    - cron: '0 8 * * *'
+  workflow_dispatch: # מאפשר להפעיל את הבוט ידנית לניסיון
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run Bot
+        env:
+          GREEN_API_ID: ${{ secrets.GREEN_API_ID }}
+          GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
+          WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
+        run: python bot.py
