@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import time
-from googletrans import Translator
+from deep_translator import GoogleTranslator # המתרגם החדש
 
 # הגדרות סודות
 ID_INSTANCE = os.getenv('GREEN_API_ID')
@@ -10,7 +10,8 @@ API_TOKEN = os.getenv('GREEN_API_TOKEN')
 CHAT_ID = os.getenv('WA_CHAT_ID')
 STORE_ID = os.getenv('AMAZON_STORE_ID')
 
-translator = Translator()
+# הגדרת המתרגם בצורה נכונה
+translator = GoogleTranslator(source='en', target='iw')
 
 CATEGORIES = {
     "מחשבים וציוד היקפי": "https://www.amazon.com/Best-Sellers-Computers-Accessories/zgbs/pc/",
@@ -22,8 +23,8 @@ CATEGORIES = {
 
 def translate_text(text):
     try:
-        translation = translator.translate(text, src='en', dest='iw')
-        return translation.text
+        # פקודת תרגום מעודכנת ל-deep-translator
+        return translator.translate(text)
     except:
         return text
 
@@ -36,7 +37,7 @@ def get_deals():
     
     for cat_name, url in CATEGORIES.items():
         try:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=15)
             soup = BeautifulSoup(response.content, "html.parser")
             items = soup.select('div#gridItemRoot')
             
@@ -68,7 +69,6 @@ def get_deals():
     return all_deals
 
 def send_media_deal(deal):
-    # שימוש בשיטת sendFileByUrl לשליחת תמונה עם טקסט
     api_url = f"https://7103.api.green-api.com/waInstance{ID_INSTANCE}/sendFileByUrl/{API_TOKEN}"
     
     caption = (
@@ -84,11 +84,15 @@ def send_media_deal(deal):
         "caption": caption
     }
     
-    response = requests.post(api_url, json=payload)
-    print(f"שליחת {deal['title']}: {response.status_code}")
-    time.sleep(5) # הפסקה גדולה יותר לשליחת מדיה
+    try:
+        response = requests.post(api_url, json=payload, timeout=20)
+        print(f"שליחת {deal['title']}: {response.status_code}")
+    except:
+        print(f"נכשלה שליחה של: {deal['title']}")
+    time.sleep(5)
 
 if __name__ == "__main__":
+    print("Starting Amazon Deals Bot...")
     deals = get_deals()
     for deal in deals:
         send_media_deal(deal)
