@@ -1,79 +1,74 @@
 import requests
 import os
 import time
-from googletrans import Translator
 from bs4 import BeautifulSoup
+from deep_translator import GoogleTranslator
 
-# הגדרות וסודות מ-GitHub
+# משיכת סודות
 ID_INSTANCE = os.getenv('GREEN_API_ID')
 API_TOKEN = os.getenv('GREEN_API_TOKEN')
 CHAT_ID = os.getenv('WA_CHAT_ID')
-
-# מפתחות ה-API של Admitad
 CLIENT_ID = os.getenv('ADMITAD_CLIENT_ID')
-CLIENT_SECRET = os.getenv('ADMITAD_CLIENT_SECRET')
 BASE64_AUTH = os.getenv('ADMITAD_BASE64')
-WEBSITE_ID = os.getenv('ADMITAD_WEBSITE_ID') # ה-ID החדש שהוספת
-
-translator = Translator()
+WEBSITE_ID = os.getenv('ADMITAD_WEBSITE_ID')
 
 def get_admitad_token():
+    print("Connecting to Admitad...")
     url = "https://api.admitad.com/token/"
     data = {"grant_type": "client_credentials", "client_id": CLIENT_ID, "scope": "deeplink_generator"}
     headers = {"Authorization": f"Basic {BASE64_AUTH}"}
     try:
         res = requests.post(url, data=data, headers=headers, timeout=10)
-        return res.json().get("access_token")
-    except: return None
-
-def get_ali_affiliate_link(original_url, token):
-    if not token or not WEBSITE_ID: return original_url
-    api_url = f"https://api.admitad.com/get_deeplink/{WEBSITE_ID}/" 
-    params = {"subid": "ali_bot", "urls": original_url}
-    headers = {"Authorization": f"Bearer {token}"}
-    try:
-        res = requests.get(api_url, params=params, headers=headers, timeout=10)
-        return res.json()[0]
-    except: return original_url
+        token = res.json().get("access_token")
+        if token: print("Admitad Token: OK")
+        return token
+    except:
+        print("Admitad Token: FAILED")
+        return None
 
 def get_ali_deals():
-    url = "https://www.aliexpress.com/globallocal/superdeals.html"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9"
-    }
+    print("Searching for AliExpress deals...")
+    # שימוש בקישור קטגוריה כללי שיותר קל לסרוק
+    url = "https://www.aliexpress.com/category/200214006/consumer-electronics.html"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
     deals = []
     try:
         res = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(res.content, "lxml")
-        items = soup.select('.sd-item-info')[:5] 
-        for item in items:
-            title_el = item.select_one('.sd-title')
-            link_el = item.find('a')
-            img_el = item.find('img')
-            if title_el and link_el:
-                deals.append({
-                    "title": title_el.text.strip(),
-                    "link": "https:" + link_el['href'].split('?')[0],
-                    "img": "https:" + img_el['src'] if img_el else ""
-                })
-    except: pass
+        links = soup.find_all('a', href=True)
+        for link in links:
+            href = link['href']
+            if '/item/' in href and len(deals) < 3:
+                full_url = "https:" + href.split('?')[0] if href.startswith('//') else href.split('?')[0]
+                deals.append({"link": full_url})
+        print(f"Found {len(deals)} deals.")
+    except Exception as e:
+        print(f"Scraping error: {e}")
     return deals
 
-def send_to_wa(title, link, img_url):
-    api_url = f"https://7103.api.green-api.com/waInstance{ID_INSTANCE}/sendFileByUrl/{API_TOKEN}"
-    try: heb_title = translator.translate(title, dest='iw').text
-    except: heb_title = title
-    
-    caption = f"🎁 *דיל לוהט מאלי-אקספרס!* 🎁\n\n📦 {heb_title}\n\n🔗 לקנייה מאובטחת:\n{link}"
-    payload = {"chatId": CHAT_ID, "urlFile": img_url, "fileName": "ali.jpg", "caption": caption}
-    requests.post(api_url, json=payload, timeout=15)
-    time.sleep(10)
+def send_to_wa(link):
+    api_url = f"https://7103.api.green-api.com/waInstance{ID_INSTANCE}/sendMessage/{API_TOKEN}"
+    message = f"🎁 *דיל חדש מאלי-אקספרס!* 🎁\n\n🔗 לקנייה:\n{link}"
+    payload = {"chatId": CHAT_ID, "message": message}
+    try:
+        requests.post(api_url, json=payload, timeout=15)
+        print(f"WA Sent: {link}")
+    except:
+        print("WA Failed")
 
 if __name__ == "__main__":
     token = get_admitad_token()
     if token:
         deals = get_ali_deals()
         for deal in deals:
-            aff_link = get_ali_affiliate_link(deal['link'], token)
-            send_to_wa(deal['title'], aff_link, deal['img'])
+            # הפיכת הקישור לקישור שותף שלך
+            api_url = f"https://api.admitad.com/get_deeplink/{WEBSITE_ID}/"
+            params = {"urls": deal['link']}
+            headers = {"Authorization": f"Bearer {token}"}
+            try:
+                aff_res = requests.get(api_url, params=params, headers=headers)
+                aff_link = aff_res.json()[0]
+                send_to_wa(aff_link)
+                time.sleep(5)
+            except:
+                print("DeepLink error")
