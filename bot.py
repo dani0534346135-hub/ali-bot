@@ -2,16 +2,16 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import time
-from deep_translator import GoogleTranslator # המתרגם החדש
+from deep_translator import GoogleTranslator
 
-# הגדרות סודות
+# הגדרות סודות - מושך מ-GitHub Secrets
 ID_INSTANCE = os.getenv('GREEN_API_ID')
 API_TOKEN = os.getenv('GREEN_API_TOKEN')
 CHAT_ID = os.getenv('WA_CHAT_ID')
 STORE_ID = os.getenv('AMAZON_STORE_ID')
 
-# הגדרת המתרגם בצורה נכונה
-translator = GoogleTranslator(source='en', target='iw')
+# הגדרת המתרגם (יציב יותר מ-googletrans)
+translator = GoogleTranslator(source='auto', target='iw')
 
 CATEGORIES = {
     "מחשבים וציוד היקפי": "https://www.amazon.com/Best-Sellers-Computers-Accessories/zgbs/pc/",
@@ -23,27 +23,29 @@ CATEGORIES = {
 
 def translate_text(text):
     try:
-        # פקודת תרגום מעודכנת ל-deep-translator
+        # שימוש במנגנון התרגום החדש
         return translator.translate(text)
-    except:
+    except Exception as e:
+        print(f"Translation error: {e}")
         return text
 
 def get_deals():
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9"
     }
     all_deals = []
     
     for cat_name, url in CATEGORIES.items():
         try:
+            print(f"Sourcing deals for: {cat_name}")
             response = requests.get(url, headers=headers, timeout=15)
             soup = BeautifulSoup(response.content, "html.parser")
             items = soup.select('div#gridItemRoot')
             
             count = 0
             for item in items:
-                if count >= 2: break
+                if count >= 2: break # שולח 2 מוצרים מכל קטגוריה
                 
                 link_el = item.find('a', class_='a-link-normal', tabindex="-1")
                 img_el = item.find('img')
@@ -62,13 +64,14 @@ def get_deals():
                             "category": cat_name
                         })
                         count += 1
-            time.sleep(1)
+            time.sleep(2)
         except Exception as e:
-            print(f"שגיאה בקטגוריית {cat_name}: {e}")
+            print(f"Error in category {cat_name}: {e}")
             
     return all_deals
 
 def send_media_deal(deal):
+    # שליחת הודעה עם תמונה דרך Green-API
     api_url = f"https://7103.api.green-api.com/waInstance{ID_INSTANCE}/sendFileByUrl/{API_TOKEN}"
     
     caption = (
@@ -86,13 +89,14 @@ def send_media_deal(deal):
     
     try:
         response = requests.post(api_url, json=payload, timeout=20)
-        print(f"שליחת {deal['title']}: {response.status_code}")
-    except:
-        print(f"נכשלה שליחה של: {deal['title']}")
+        print(f"Sent: {deal['title']} (Status: {response.status_code})")
+    except Exception as e:
+        print(f"Failed to send {deal['title']}: {e}")
     time.sleep(5)
 
 if __name__ == "__main__":
-    print("Starting Amazon Deals Bot...")
+    print("--- Starting Amazon Deals Bot ---")
     deals = get_deals()
     for deal in deals:
         send_media_deal(deal)
+    print("--- Amazon Bot Finished ---")
