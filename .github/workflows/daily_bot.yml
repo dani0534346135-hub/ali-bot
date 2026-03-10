@@ -25,16 +25,14 @@ jobs:
 
       - name: Run Bots
         env:
-          # סודות קיימים (אמזון וואטסאפ)
           GREEN_API_ID: ${{ secrets.GREEN_API_ID }}
           GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
           WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
           AMAZON_STORE_ID: ${{ secrets.AMAZON_STORE_ID }}
-          # סודות חדשים (אלי-אקספרס / Admitad)
           ADMITAD_CLIENT_ID: ${{ secrets.ADMITAD_CLIENT_ID }}
           ADMITAD_CLIENT_SECRET: ${{ secrets.ADMITAD_CLIENT_SECRET }}
           ADMITAD_BASE64: ${{ secrets.ADMITAD_BASE64 }}
-          ADMITAD_WEBSITE_ID: ${{ secrets.ADMITAD_WEBSITE_ID }} # <--- השורה הזו הייתה חסרה!
+          ADMITAD_WEBSITE_ID: ${{ secrets.ADMITAD_WEBSITE_ID }}
         run: |
           python bot.py
           python aliexpress_bot.py
