@@ -34,6 +34,7 @@ jobs:
           ADMITAD_CLIENT_ID: ${{ secrets.ADMITAD_CLIENT_ID }}
           ADMITAD_CLIENT_SECRET: ${{ secrets.ADMITAD_CLIENT_SECRET }}
           ADMITAD_BASE64: ${{ secrets.ADMITAD_BASE64 }}
+          ADMITAD_WEBSITE_ID: ${{ secrets.ADMITAD_WEBSITE_ID }} # <--- השורה הזו הייתה חסרה!
         run: |
           python bot.py
           python aliexpress_bot.py
