@@ -6,7 +6,7 @@ import time
 ID_INSTANCE = os.getenv('GREEN_API_ID')
 API_TOKEN = os.getenv('GREEN_API_TOKEN')
 CHAT_ID = os.getenv('WA_CHAT_ID')
-BASE64_AUTH = os.getenv('ADMITAD_BASE64')
+BASE64_AUTH =(RVdJQ2pyRzYwSHBxdUJMZElnS2dRZHdqZTdMRTYxOngwTm1LTldLTHVPT3JpZ2FTVXQ4RkN6ckNadE5CRw==)
 WEBSITE_ID = os.getenv('ADMITAD_WEBSITE_ID')
 
 def get_admitad_token():
