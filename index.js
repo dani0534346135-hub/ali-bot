@@ -15,57 +15,69 @@ const restAPI = whatsAppClient.restAPI({
 
 async function runAutomation() {
     try {
-        console.log("מנסה להוריד את הפיד מאדמיטד...");
+        console.log("מתחיל משיכה של 4 מוצרים מאליאקספרס...");
         
-        // הגדרה של הורדה כ-ArrayBuffer כדי לטפל בקבצים שיורדים אוטומטית
+        // אנחנו מבקשים את ה-1MB הראשון של הקובץ (מספיק ל-4 מוצרים בטוח)
         const response = await axios({
             method: 'get',
             url: ADMITAD_FEED,
-            responseType: 'arraybuffer',
-            timeout: 60000,
+            responseType: 'stream',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'Range': 'bytes=0-1000000',
+                'User-Agent': 'Mozilla/5.0'
             }
         });
 
-        console.log("הקובץ ירד בהצלחה, מפענח נתונים...");
-        const xmlData = response.data.toString('utf-8');
-        
-        const result = await xml2js.parseStringPromise(xmlData);
-        
-        // ניווט במבנה ה-XML של אדמיטד
-        const products = result.yml_catalog.shop[0].offers[0].offer;
-        console.log(`נמצאו ${products.length} מוצרים בפיד.`);
+        let data = '';
+        let offerCount = 0;
 
-        const product = products[Math.floor(Math.random() * products.length)];
-        const englishTitle = product.name ? product.name[0] : "Product";
-        const price = (product.price ? product.price[0] : "0") + "₪";
-        const affiliateLink = product.url ? product.url[0] : "";
-        const imageUrl = product.picture ? product.picture[0] : "";
-
-        console.log("מתרגם כותרת לעברית...");
-        let hebrewTitle = englishTitle;
-        try {
-            const res = await translate(englishTitle, { to: 'he' });
-            hebrewTitle = res.text;
-        } catch (e) {
-            console.log("שגיאה בתרגום, משתמש במקור האנגלי.");
+        for await (const chunk of response.data) {
+            data += chunk;
+            // סופרים כמה מוצרים כבר קראנו
+            const matches = data.match(/<\/offer>/g);
+            if (matches && matches.length >= 4) {
+                console.log("נמצאו 4 מוצרים, עוצר הורדה...");
+                response.data.destroy();
+                break;
+            }
         }
 
-        const message = `🔥 *דיל חדש מאליאקספרס!* 🔥\n\n🛍️ ${hebrewTitle}\n💰 מחיר: *${price}*\n\n👇 לרכישה מהירה:\n${affiliateLink}`;
-
-        console.log("שולח לוואטסאפ דרך Green API...");
-        const sendResult = await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, imageUrl, 'image.jpg', message);
-        
-        if (sendResult.idMessage) {
-            console.log("✅ הדיל נשלח בהצלחה! מזהה הודעה: " + sendResult.idMessage);
-        } else {
-            console.log("⚠️ ההודעה נשלחה אבל לא התקבל מזהה חזרה.");
+        // סגירה ידנית של ה-XML כדי שיהיה תקין לפענוח
+        if (!data.trim().endsWith('</yml_catalog>')) {
+            data += '</offers></shop></yml_catalog>';
         }
+
+        const result = await xml2js.parseStringPromise(data, { strict: false });
+        const products = result.YML_CATALOG.SHOP[0].OFFERS[0].OFFER.slice(0, 4);
+
+        console.log(`מתחיל לשלוח ${products.length} מוצרים לוואטסאפ...`);
+
+        for (const product of products) {
+            const englishTitle = product.NAME ? product.NAME[0] : "Product";
+            const price = (product.PRICE ? product.PRICE[0] : "0") + "₪";
+            const affiliateLink = product.URL ? product.URL[0] : "";
+            const imageUrl = product.PICTURE ? product.PICTURE[0] : "";
+
+            let hebrewTitle = englishTitle;
+            try {
+                const res = await translate(englishTitle, { to: 'he' });
+                hebrewTitle = res.text;
+            } catch (e) { console.log("שגיאה בתרגום מוצר אחד"); }
+
+            const message = `🔥 *דיל לוהט מאליאקספרס!* 🔥\n\n🛍️ ${hebrewTitle}\n💰 מחיר: *${price}*\n\n👇 לרכישה:\n${affiliateLink}`;
+
+            await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, imageUrl, 'image.jpg', message);
+            console.log(`✅ מוצר נשלח: ${hebrewTitle.substring(0, 20)}...`);
+            
+            // השהייה קטנה בין מוצר למוצר
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+
+        console.log("🏁 הסתיים משלוח 4 המוצרים מאליאקספרס!");
         
     } catch (error) {
-        console.error("❌ שגיאה קריטית בהרצה:");
-        console.error(error.message);
+        if (error.message.includes('destroyed')) return;
+        console.error("❌ שגיאה:", error.message);
         process.exit(1);
     }
 }
