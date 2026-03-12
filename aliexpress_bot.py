@@ -81,19 +81,7 @@ if __name__ == "__main__":
         deals = get_ali_deals()
         for deal_url in deals:
             aff_link = create_deeplink(token, deal_url)
-            # אם הקישור שותף נכשל, נשלח את המקורי כדי שלא תפסיד פרסום
-            final_link = aff_link if aff_link else deal_url
-            send_to_wa(final_link)
-            time.sleep(5)
-    else:
-        print("Admitad Token: FAILED")if __name__ == "__main__":
-    token = get_admitad_token()
-    if token:
-        print("Admitad Token: OK")
-        deals = get_ali_deals()
-        for deal_url in deals:
-            aff_link = create_deeplink(token, deal_url)
-            # אם יש קישור שותף נשתמש בו, אם לא נשתמש במקורי
+            # אם הקישור שותף נכשל, נשלח את המקורי
             final_link = aff_link if aff_link else deal_url
             send_to_wa(final_link)
             time.sleep(5)
