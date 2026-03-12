@@ -2,7 +2,7 @@ import requests
 import os
 import time
 
-# משיכת סודות מהמערכת
+# משיכת סודות
 ID_INSTANCE = os.getenv('GREEN_API_ID')
 API_TOKEN = os.getenv('GREEN_API_TOKEN')
 CHAT_ID = os.getenv('WA_CHAT_ID')
@@ -16,8 +16,7 @@ def get_admitad_token():
     data = {"grant_type": "client_credentials", "scope": "deeplink_generator"}
     try:
         res = requests.post(url, data=data, headers=headers, timeout=10)
-        token = res.json().get("access_token")
-        return token
+        return res.json().get("access_token")
     except Exception as e:
         print(f"Token Error: {e}")
         return None
@@ -52,8 +51,7 @@ def create_deeplink(token, target_url):
         if isinstance(data, list) and len(data) > 0:
             return data[0]
         return None
-    except Exception as e:
-        print(f"DeepLink API Error: {e}")
+    except:
         return None
 
 def send_to_wa(link):
@@ -66,7 +64,21 @@ def send_to_wa(link):
         requests.post(api_url, json=payload, timeout=15)
         print(f"WA Sent: {link}")
     except Exception as e:
-        print(f"WhatsApp Sending Error: {e}")
+        print(f"WhatsApp Error: {e}")
+
+if __name__ == "__main__":
+    token = get_admitad_token()
+    if token:
+        print("Admitad Token: OK")
+        deals = get_ali_deals()
+        for deal_url in deals:
+            aff_link = create_deeplink(token, deal_url)
+            # אם יש קישור שותף נשתמש בו, אם לא נשתמש במקורי
+            final_link = aff_link if aff_link else deal_url
+            send_to_wa(final_link)
+            time.sleep(5)
+    else:
+        print("Admitad Token: FAILED")        print(f"WhatsApp Sending Error: {e}")
 
 if __name__ == "__main__":
     token = get_admitad_token()
