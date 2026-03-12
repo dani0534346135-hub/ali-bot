@@ -78,20 +78,4 @@ if __name__ == "__main__":
             send_to_wa(final_link)
             time.sleep(5)
     else:
-        print("Admitad Token: FAILED")        print(f"WhatsApp Sending Error: {e}")
-
-if __name__ == "__main__":
-    token = get_admitad_token()
-    if token:
-        print("Admitad Token: OK")
-        deals = get_ali_deals()
-        if not deals:
-            print("No deals found to process.")
-        for deal_url in deals:
-            aff_link = create_deeplink(token, deal_url)
-            # אם הצלחנו ליצור קישור שותף - נשלח אותו. אם לא - נשלח קישור רגיל
-            final_link = aff_link if aff_link else deal_url
-            send_to_wa(final_link)
-            time.sleep(5)
-    else:
-        print("Admitad Token: FAILED - Check your BASE64 secret.")
+        print("Admitad Token: FAILED")
