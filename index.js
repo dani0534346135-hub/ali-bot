@@ -13,50 +13,58 @@ const restAPI = whatsAppClient.restAPI({
     apiTokenInstance: GREEN_TOKEN
 });
 
-async function translateToHebrew(text) {
-    try {
-        console.log("מתחיל תרגום...");
-        // הוספנו Timeout לתרגום כדי שלא יתקע את כל הבוט
-        const res = await translate(text, { to: 'he' });
-        return res.text;
-    } catch (e) {
-        console.log("שגיאת תרגום (משתמש במקור):", e.message);
-        return text;
-    }
-}
-
 async function runAutomation() {
     try {
-        console.log("מתחבר לפיד של אדמיטד...");
-        const response = await axios.get(ADMITAD_FEED, { timeout: 30000 });
-        console.log("הפיד התקבל, מפענח XML...");
+        console.log("מנסה להוריד את הפיד מאדמיטד...");
         
-        const result = await xml2js.parseStringPromise(response.data);
+        // הגדרה של הורדה כ-ArrayBuffer כדי לטפל בקבצים שיורדים אוטומטית
+        const response = await axios({
+            method: 'get',
+            url: ADMITAD_FEED,
+            responseType: 'arraybuffer',
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
+
+        console.log("הקובץ ירד בהצלחה, מפענח נתונים...");
+        const xmlData = response.data.toString('utf-8');
+        
+        const result = await xml2js.parseStringPromise(xmlData);
+        
+        // ניווט במבנה ה-XML של אדמיטד
         const products = result.yml_catalog.shop[0].offers[0].offer;
-        
-        if (!products || products.length === 0) {
-            throw new Error("לא נמצאו מוצרים בפיד");
-        }
+        console.log(`נמצאו ${products.length} מוצרים בפיד.`);
 
         const product = products[Math.floor(Math.random() * products.length)];
-        console.log("נבחר מוצר:", product.name[0]);
+        const englishTitle = product.name ? product.name[0] : "Product";
+        const price = (product.price ? product.price[0] : "0") + "₪";
+        const affiliateLink = product.url ? product.url[0] : "";
+        const imageUrl = product.picture ? product.picture[0] : "";
 
-        const englishTitle = product.name[0];
-        const price = product.price[0] + "₪";
-        const affiliateLink = product.url[0];
-        const imageUrl = product.picture[0];
+        console.log("מתרגם כותרת לעברית...");
+        let hebrewTitle = englishTitle;
+        try {
+            const res = await translate(englishTitle, { to: 'he' });
+            hebrewTitle = res.text;
+        } catch (e) {
+            console.log("שגיאה בתרגום, משתמש במקור האנגלי.");
+        }
 
-        const hebrewTitle = await translateToHebrew(englishTitle);
-        const finalTitle = hebrewTitle.length > 70 ? hebrewTitle.substring(0, 67) + "..." : hebrewTitle;
+        const message = `🔥 *דיל חדש מאליאקספרס!* 🔥\n\n🛍️ ${hebrewTitle}\n💰 מחיר: *${price}*\n\n👇 לרכישה מהירה:\n${affiliateLink}`;
 
-        const message = `🔥 *דיל חדש מאליאקספרס!* 🔥\n\n🛍️ ${finalTitle}\n💰 במחיר: *${price}*\n\n👇 לרכישה מהירה:\n${affiliateLink}`;
-
-        console.log("שולח הודעה לוואטסאפ...");
-        await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, imageUrl, 'image.jpg', message);
-        console.log("✅ נשלח בהצלחה!");
+        console.log("שולח לוואטסאפ דרך Green API...");
+        const sendResult = await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, imageUrl, 'image.jpg', message);
+        
+        if (sendResult.idMessage) {
+            console.log("✅ הדיל נשלח בהצלחה! מזהה הודעה: " + sendResult.idMessage);
+        } else {
+            console.log("⚠️ ההודעה נשלחה אבל לא התקבל מזהה חזרה.");
+        }
         
     } catch (error) {
-        console.error("❌ שגיאה:");
+        console.error("❌ שגיאה קריטית בהרצה:");
         console.error(error.message);
         process.exit(1);
     }
