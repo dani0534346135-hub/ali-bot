@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import time
+import random # הוספת בחירה אקראית
 from deep_translator import GoogleTranslator
 
 # משיכת סודות מ-GitHub
@@ -12,7 +13,7 @@ STORE_ID = os.getenv('AMAZON_STORE_ID')
 
 translator = GoogleTranslator(source='auto', target='iw')
 
-# קישורים לרשימות ה-Best Sellers (הכי נמכרים/לוהטים)
+# קטגוריות Best Sellers
 CATEGORIES = {
     "🔥 מחשבים וציוד היקפי": "https://www.amazon.com/Best-Sellers-Computers-Accessories/zgbs/pc/",
     "📱 אלקטרוניקה וגאדג'טים": "https://www.amazon.com/Best-Sellers-Electronics/zgbs/electronics/",
@@ -21,7 +22,6 @@ CATEGORIES = {
 
 def translate_text(text):
     try:
-        # תרגום כותרת המוצר לעברית
         return translator.translate(text)
     except:
         return text
@@ -33,37 +33,40 @@ def get_deals():
     }
     all_deals = []
     
+    # בוחרים קטגוריה אחת אקראית בכל הרצה כדי לא להציף, או שסורקים את כולן ומערבבים
     for cat_name, url in CATEGORIES.items():
         try:
-            print(f"מושך מוצרים מקטגוריית: {cat_name}")
+            print(f"סורק מוצרים לוהטים ב: {cat_name}")
             res = requests.get(url, headers=headers, timeout=15)
             soup = BeautifulSoup(res.content, "html.parser")
             
-            # שליפת 3 המוצרים הראשונים (הכי נמכרים כרגע)
-            items = soup.select('div#gridItemRoot')[:3] 
+            # מוצא את כל המוצרים בדף (בדרך כלל עד 50)
+            items = soup.select('div#gridItemRoot')
             
-            for item in items:
-                link_el = item.find('a', class_='a-link-normal', tabindex="-1")
-                img_el = item.find('img')
+            if items:
+                # בוחר 3 מוצרים אקראיים מתוך הרשימה שנמצאה
+                random_items = random.sample(items, min(len(items), 3))
                 
-                if link_el and img_el:
-                    # בניית קישור שותפים נקי
-                    raw_link = "https://www.amazon.com" + link_el['href'].split('?')[0]
-                    clean_title = img_el.get('alt') or "מוצר ללא תיאור"
+                for item in random_items:
+                    link_el = item.find('a', class_='a-link-normal', tabindex="-1")
+                    img_el = item.find('img')
                     
-                    all_deals.append({
-                        "title": translate_text(clean_title),
-                        "link": f"{raw_link}?tag={STORE_ID}",
-                        "image": img_el.get('src'),
-                        "category": cat_name
-                    })
+                    if link_el and img_el:
+                        raw_link = "https://www.amazon.com" + link_el['href'].split('?')[0]
+                        clean_title = img_el.get('alt') or "מוצר מומלץ"
+                        
+                        all_deals.append({
+                            "title": translate_text(clean_title),
+                            "link": f"{raw_link}?tag={STORE_ID}",
+                            "image": img_el.get('src'),
+                            "category": cat_name
+                        })
         except Exception as e:
-            print(f"שגיאה במשיכת קטגוריה {cat_name}: {e}")
+            print(f"שגיאה בגישה לקטגוריה {cat_name}: {e}")
             
     return all_deals
 
 def send_to_wa(deal):
-    # כתובת ה-API לשליחת קובץ (תמונה + טקסט)
     url = f"https://7103.api.green-api.com/waInstance{ID_INSTANCE}/sendFileByUrl/{API_TOKEN}"
     
     caption = (
@@ -82,21 +85,18 @@ def send_to_wa(deal):
     try:
         response = requests.post(url, json=payload, timeout=20)
         if response.status_code == 200:
-            print(f"✅ הצלחתי לשלוח: {deal['title'][:30]}...")
+            print(f"✅ נשלח: {deal['title'][:30]}...")
         else:
-            print(f"❌ שגיאה בשליחה: {response.text}")
+            print(f"❌ שגיאה: {response.text}")
     except Exception as e:
-        print(f"❌ שגיאה בתקשורת עם Green API: {e}")
+        print(f"❌ שגיאה ב-API: {e}")
 
 if __name__ == "__main__":
-    print("🚀 בוט אמזון מתחיל לעבוד...")
     deals = get_deals()
-    
-    if not deals:
-        print("⚠️ לא נמצאו מוצרים חדשים.")
-    
-    for d in deals:
-        send_to_wa(d)
-        time.sleep(10) # השהייה בין הודעה להודעה כדי לא להיחסם
-        
-    print("🏁 סיימתי את המשימה להיום!")
+    if deals:
+        # מערבב שוב את כל המוצרים מכל הקטגוריות
+        random.shuffle(deals)
+        # שולח רק 3 מוצרים סה"כ מתוך כל מה שנאסף
+        for d in deals[:3]:
+            send_to_wa(d)
+            time.sleep(15)
