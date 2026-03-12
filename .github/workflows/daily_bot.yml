@@ -13,26 +13,39 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # --- הגדרת Node.js עבור אליאקספרס ---
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install dependencies
+      - name: Install Node dependencies
         run: npm install
 
-      - name: Run AliExpress Bot
-        env:
-          GREEN_ID: ${{ secrets.GREEN_API_ID }}
-          GREEN_TOKEN: ${{ secrets.GREEN_API_TOKEN }} # הסוד שציינת
-          WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
-          ADMITAD_FEED: ${{ secrets.ADMITAD_FEED }}
-        run: node index.js
+      # --- הגדרת Python עבור אמזון ---
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
 
-      - name: Run Amazon Bot
+      - name: Install Python dependencies
+        run: |
+          pip install requests beautifulsoup4 lxml deep-translator
+
+      # --- הרצת הבוט של אליאקספרס (JavaScript) ---
+      - name: Run AliExpress Bot
         env:
           GREEN_ID: ${{ secrets.GREEN_API_ID }}
           GREEN_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
           WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
+          ADMITAD_FEED: ${{ secrets.ADMITAD_FEED }}
+        run: node index.js
+
+      # --- הרצת הבוט של אמזון (Python) ---
+      - name: Run Amazon Bot
+        env:
+          GREEN_API_ID: ${{ secrets.GREEN_API_ID }}
+          GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
+          WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
           AMAZON_STORE_ID: ${{ secrets.AMAZON_STORE_ID }}
-        run: node amazon.js
+        run: python bot.py
