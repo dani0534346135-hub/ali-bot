@@ -13,12 +13,20 @@ def get_admitad_token():
     print("Connecting to Admitad...")
     url = "https://api.admitad.com/token/"
     headers = {"Authorization": f"Basic {BASE64_AUTH}"}
-    data = {"grant_type": "client_credentials", "scope": "deeplink_generator"}
+    data = {
+        "grant_type": "client_credentials", 
+        "scope": "deeplink_generator deals coupons ads"
+    }
     try:
         res = requests.post(url, data=data, headers=headers, timeout=10)
-        return res.json().get("access_token")
+        token_data = res.json()
+        if "access_token" in token_data:
+            return token_data["access_token"]
+        else:
+            print(f"Admitad Error Details: {token_data}")
+            return None
     except Exception as e:
-        print(f"Token Error: {e}")
+        print(f"Token System Error: {e}")
         return None
 
 def get_ali_deals():
@@ -63,10 +71,22 @@ def send_to_wa(link):
     try:
         requests.post(api_url, json=payload, timeout=15)
         print(f"WA Sent: {link}")
-    except Exception as e:
-        print(f"WhatsApp Error: {e}")
+    except:
+        pass
 
 if __name__ == "__main__":
+    token = get_admitad_token()
+    if token:
+        print("Admitad Token: OK")
+        deals = get_ali_deals()
+        for deal_url in deals:
+            aff_link = create_deeplink(token, deal_url)
+            # אם הקישור שותף נכשל, נשלח את המקורי כדי שלא תפסיד פרסום
+            final_link = aff_link if aff_link else deal_url
+            send_to_wa(final_link)
+            time.sleep(5)
+    else:
+        print("Admitad Token: FAILED")if __name__ == "__main__":
     token = get_admitad_token()
     if token:
         print("Admitad Token: OK")
