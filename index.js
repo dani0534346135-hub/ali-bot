@@ -13,11 +13,14 @@ const restAPI = whatsAppClient.restAPI({
     apiTokenInstance: GREEN_TOKEN
 });
 
-// רשימת מילים של חלקי חילוף ושטויות
+// רשימת מילים אסורות מורחבת - כל מה שציינת ועוד
 const BANNED_KEYWORDS = [
     'part', 'repair', 'replacement', 'gear', 'shaft', 'valve', 'pump', 'recoil', 
     'connector', 'adapter', 'screw', 'oil', 'motor', 'carburetor', 'filter', 
-    'nozzle', 'seal', 'bearing', 'bracket', 'clutch', 'hose', 'tube'
+    'nozzle', 'seal', 'bearing', 'bracket', 'clutch', 'hose', 'tube',
+    'brass', 'copper', 'rod', 'aluminum', 'bar', 'module', 'diamond', 'burs',
+    'square', 'ruler', 'bit', 'drill', 'lathe', 'milling', 'cnc', 'pipe', 'welding',
+    'kit', 'nozzle', 'washer', 'ring', 'bolt', 'nut'
 ];
 
 async function shortenUrl(longUrl) {
@@ -29,19 +32,19 @@ async function shortenUrl(longUrl) {
 
 async function runAutomation() {
     try {
-        console.log("מחפש דילים שווים באמת...");
+        console.log("מתחיל סריקה עם סינון מחיר קשוח...");
         
         const response = await axios({
             method: 'get',
             url: ADMITAD_FEED,
             responseType: 'stream',
-            headers: { 'Range': 'bytes=0-800000', 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'Range': 'bytes=0-2000000', 'User-Agent': 'Mozilla/5.0' }
         });
 
         let data = '';
         for await (const chunk of response.data) {
             data += chunk;
-            if ((data.match(/<\/offer>/g) || []).length >= 40) { // לוקחים 40 כדי שיהיה ממה לסנן
+            if ((data.match(/<\/offer>/g) || []).length >= 80) { // סורקים יותר מוצרים כדי למצוא איכותיים
                 response.data.destroy();
                 break;
             }
@@ -52,24 +55,25 @@ async function runAutomation() {
         const result = await xml2js.parseStringPromise(data, { strict: false });
         let allOffers = result.YML_CATALOG.SHOP[0].OFFERS[0].OFFER;
 
-        // סינון חכם
+        // --- מנגנון סינון משופר ---
         let filtered = allOffers.filter(o => {
             const name = (o.NAME ? o.NAME[0] : "").toLowerCase();
-            const price = parseFloat(o.PRICE ? o.PRICE[0] : "0");
-            const hasImage = o.PICTURE && o.PICTURE[0];
             
-            // הגנות: לא חלק חילוף וגם מחיר מעל 25 ש"ח (מסנן ברגים וצינורות)
+            // ניקוי המחיר: מוציא רק מספרים ונקודה עשרונית
+            const rawPrice = o.PRICE ? o.PRICE[0].toString() : "0";
+            const cleanPrice = parseFloat(rawPrice.replace(/[^\d.]/g, ''));
+            
+            const hasImage = o.PICTURE && o.PICTURE[0];
             const isNotBanned = !BANNED_KEYWORDS.some(word => name.includes(word));
-            const isExpensiveEnough = price >= 25; 
-
-            return isNotBanned && isExpensiveEnough && hasImage;
+            
+            // סינון: רק מוצרים מעל 35 ש"ח (כדי להתרחק מברגים ומוטות נחושת)
+            return isNotBanned && hasImage && cleanPrice >= 35;
         });
 
-        // אם לא מצאנו מספיק אחרי סינון, נוריד קצת את הרף
-        if (filtered.length < 5) filtered = allOffers.filter(o => o.PICTURE);
+        console.log(`נמצאו ${filtered.length} מוצרים שעברו את הסינון.`);
 
+        // בחירת 5 אקראיים מתוך האיכותיים
         const selected = filtered.sort(() => 0.5 - Math.random()).slice(0, 5);
-        console.log(`נבחרו ${selected.length} מוצרים איכותיים.`);
 
         for (const product of selected) {
             const title = product.NAME[0];
@@ -83,13 +87,13 @@ async function runAutomation() {
                 hebTitle = res.text;
             } catch (e) {}
 
-            const message = `🌟 *דיל שווה מאליאקספרס!* 🌟\n\n🛍️ ${hebTitle.substring(0, 85)}\n💰 מחיר: *${price}*\n\n👇 לרכישה:\n${url}`;
+            const message = `🛍️ *דיל נבחר מאליאקספרס!* 🛍️\n\n✨ ${hebTitle.substring(0, 85)}\n💰 מחיר: *${price}*\n\n👇 לפרטים ורכישה:\n${url}`;
 
             await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, img, 'img.jpg', message);
             await new Promise(r => setTimeout(r, 4000));
         }
     } catch (error) {
-        if (!error.message.includes('destroyed')) console.error(error);
+        if (!error.message.includes('destroyed')) console.error("שגיאה:", error.message);
     }
 }
 runAutomation();
