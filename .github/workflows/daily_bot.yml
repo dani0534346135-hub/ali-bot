@@ -2,43 +2,37 @@ name: AliBot Daily Send
 
 on:
   schedule:
-    - cron: '0 8 * * *' # ירוץ כל יום ב-10 בבוקר שעון ישראל
-  workflow_dispatch: # מאפשר לך להריץ ידנית בלחיצת כפתור
+    - cron: '0 7-21/2 * * *' # ירוץ כל שעתיים בשעות אי-זוגיות
+  workflow_dispatch: # מאפשר הרצה ידנית
 
 jobs:
-  build:
+  run-bots:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.9'
+          node-version: '18'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests beautifulsoup4 lxml deep-translator
+        run: npm install
 
-      - name: Run Bots
+      - name: Run AliExpress Bot
         env:
-          # משתנים עבור גרין API
-          GREEN_API_ID: ${{ secrets.GREEN_API_ID }}
-          GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
+          GREEN_ID: ${{ secrets.GREEN_API_ID }}
+          GREEN_TOKEN: ${{ secrets.GREEN_API_TOKEN }} # הסוד שציינת
           WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
-          
-          # משתנים עבור אמזון
+          ADMITAD_FEED: ${{ secrets.ADMITAD_FEED }}
+        run: node index.js
+
+      - name: Run Amazon Bot
+        env:
+          GREEN_ID: ${{ secrets.GREEN_API_ID }}
+          GREEN_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
+          WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
           AMAZON_STORE_ID: ${{ secrets.AMAZON_STORE_ID }}
-          
-          # משתנים עבור אדמיטד (אלי אקספרס)
-          ADMITAD_CLIENT_ID: ${{ secrets.ADMITAD_CLIENT_ID }}
-          ADMITAD_CLIENT_SECRET: ${{ secrets.ADMITAD_CLIENT_SECRET }}
-          ADMITAD_WEBSITE_ID: ${{ secrets.ADMITAD_WEBSITE_ID }}
-        run: |
-          echo "Starting Amazon Bot..."
-          python bot.py
-          echo "Starting AliExpress Bot..."
-          python aliexpress_bot.py
+        run: node amazon.js
