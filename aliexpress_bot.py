@@ -10,7 +10,11 @@ BASE64_AUTH = os.getenv('ADMITAD_BASE64')
 WEBSITE_ID = os.getenv('ADMITAD_WEBSITE_ID')
 
 def get_admitad_token():
-    print("Connecting to Admitad...")
+    print("Checking Credentials...")
+    if not BASE64_AUTH:
+        print("CRITICAL ERROR: ADMITAD_BASE64 is missing in GitHub Secrets!")
+        return None
+        
     url = "https://api.admitad.com/token/"
     headers = {"Authorization": f"Basic {BASE64_AUTH}"}
     data = {
@@ -23,16 +27,16 @@ def get_admitad_token():
         if "access_token" in token_data:
             return token_data["access_token"]
         else:
-            print(f"Admitad Error Details: {token_data}")
+            print(f"Admitad API Error: {token_data}")
             return None
     except Exception as e:
-        print(f"Token System Error: {e}")
+        print(f"Connection Error: {e}")
         return None
 
 def get_ali_deals():
     print("Searching for AliExpress deals...")
     url = "https://www.aliexpress.com/category/200214006/consumer-electronics.html"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    headers = {"User-Agent": "Mozilla/5.0"}
     deals = []
     try:
         res = requests.get(url, headers=headers, timeout=15)
@@ -45,22 +49,21 @@ def get_ali_deals():
                 full_url = "https:" + href.split('?')[0] if href.startswith('//') else href.split('?')[0]
                 deals.append(full_url)
         print(f"Found {len(deals)} deals.")
-    except Exception as e:
-        print(f"Scraping Error: {e}")
+    except: pass
     return deals
 
 def create_deeplink(token, target_url):
+    if not WEBSITE_ID:
+        return target_url
     api_url = f"https://api.admitad.com/get_deeplink/{WEBSITE_ID}/"
     headers = {"Authorization": f"Bearer {token}"}
     params = {"subid": "ali_bot", "urls": target_url}
     try:
         res = requests.get(api_url, params=params, headers=headers, timeout=10)
         data = res.json()
-        if isinstance(data, list) and len(data) > 0:
-            return data[0]
-        return None
+        return data[0] if isinstance(data, list) else target_url
     except:
-        return None
+        return target_url
 
 def send_to_wa(link):
     api_url = f"https://7103.api.green-api.com/waInstance{ID_INSTANCE}/sendMessage/{API_TOKEN}"
@@ -71,8 +74,7 @@ def send_to_wa(link):
     try:
         requests.post(api_url, json=payload, timeout=15)
         print(f"WA Sent: {link}")
-    except:
-        pass
+    except: pass
 
 if __name__ == "__main__":
     token = get_admitad_token()
@@ -81,9 +83,7 @@ if __name__ == "__main__":
         deals = get_ali_deals()
         for deal_url in deals:
             aff_link = create_deeplink(token, deal_url)
-            # אם הקישור שותף נכשל, נשלח את המקורי
-            final_link = aff_link if aff_link else deal_url
-            send_to_wa(final_link)
+            send_to_wa(aff_link)
             time.sleep(5)
     else:
-        print("Admitad Token: FAILED")
+        print("Admitad Token: FAILED - Please check your GitHub Secrets.")
