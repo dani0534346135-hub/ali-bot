@@ -13,14 +13,13 @@ const restAPI = whatsAppClient.restAPI({
     apiTokenInstance: GREEN_TOKEN
 });
 
-// רשימת מילים אסורות מורחבת - כל מה שציינת ועוד
 const BANNED_KEYWORDS = [
     'part', 'repair', 'replacement', 'gear', 'shaft', 'valve', 'pump', 'recoil', 
     'connector', 'adapter', 'screw', 'oil', 'motor', 'carburetor', 'filter', 
     'nozzle', 'seal', 'bearing', 'bracket', 'clutch', 'hose', 'tube',
     'brass', 'copper', 'rod', 'aluminum', 'bar', 'module', 'diamond', 'burs',
     'square', 'ruler', 'bit', 'drill', 'lathe', 'milling', 'cnc', 'pipe', 'welding',
-    'kit', 'nozzle', 'washer', 'ring', 'bolt', 'nut'
+    'washer', 'ring', 'bolt', 'nut', 'nozzle'
 ];
 
 async function shortenUrl(longUrl) {
@@ -32,19 +31,21 @@ async function shortenUrl(longUrl) {
 
 async function runAutomation() {
     try {
-        console.log("מתחיל סריקה עם סינון מחיר קשוח...");
+        console.log("סורק טווח רחב בפיד לחיפוש מוצרים איכותיים...");
         
+        // מורידים 3MB כדי להבטיח שיש מספיק מוצרים לסנן
         const response = await axios({
             method: 'get',
             url: ADMITAD_FEED,
             responseType: 'stream',
-            headers: { 'Range': 'bytes=0-2000000', 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'Range': 'bytes=0-3000000', 'User-Agent': 'Mozilla/5.0' }
         });
 
         let data = '';
         for await (const chunk of response.data) {
             data += chunk;
-            if ((data.match(/<\/offer>/g) || []).length >= 80) { // סורקים יותר מוצרים כדי למצוא איכותיים
+            // אוספים לפחות 150 מוצרים כדי שיהיה סיכוי למצוא דברים מעניינים
+            if ((data.match(/<\/offer>/g) || []).length >= 150) {
                 response.data.destroy();
                 break;
             }
@@ -55,24 +56,26 @@ async function runAutomation() {
         const result = await xml2js.parseStringPromise(data, { strict: false });
         let allOffers = result.YML_CATALOG.SHOP[0].OFFERS[0].OFFER;
 
-        // --- מנגנון סינון משופר ---
-        let filtered = allOffers.filter(o => {
-            const name = (o.NAME ? o.NAME[0] : "").toLowerCase();
-            
-            // ניקוי המחיר: מוציא רק מספרים ונקודה עשרונית
-            const rawPrice = o.PRICE ? o.PRICE[0].toString() : "0";
-            const cleanPrice = parseFloat(rawPrice.replace(/[^\d.]/g, ''));
-            
-            const hasImage = o.PICTURE && o.PICTURE[0];
-            const isNotBanned = !BANNED_KEYWORDS.some(word => name.includes(word));
-            
-            // סינון: רק מוצרים מעל 35 ש"ח (כדי להתרחק מברגים ומוטות נחושת)
-            return isNotBanned && hasImage && cleanPrice >= 35;
-        });
+        // פונקציית סינון
+        const filterByPrice = (minPrice) => {
+            return allOffers.filter(o => {
+                const name = (o.NAME ? o.NAME[0] : "").toLowerCase();
+                const rawPrice = o.PRICE ? o.PRICE[0].toString() : "0";
+                const cleanPrice = parseFloat(rawPrice.replace(/[^\d.]/g, ''));
+                const isNotBanned = !BANNED_KEYWORDS.some(word => name.includes(word));
+                return isNotBanned && o.PICTURE && cleanPrice >= minPrice;
+            });
+        };
 
-        console.log(`נמצאו ${filtered.length} מוצרים שעברו את הסינון.`);
+        // מנסים למצוא מעל 35 ש"ח, אם אין - יורדים ל-15
+        let filtered = filterByPrice(35);
+        if (filtered.length < 5) {
+            console.log("לא נמצאו מספיק מוצרים ב-35 שח, מנסה רף של 15 שח...");
+            filtered = filterByPrice(15);
+        }
 
-        // בחירת 5 אקראיים מתוך האיכותיים
+        console.log(`נמצאו ${filtered.length} מוצרים פוטנציאליים.`);
+
         const selected = filtered.sort(() => 0.5 - Math.random()).slice(0, 5);
 
         for (const product of selected) {
@@ -87,9 +90,10 @@ async function runAutomation() {
                 hebTitle = res.text;
             } catch (e) {}
 
-            const message = `🛍️ *דיל נבחר מאליאקספרס!* 🛍️\n\n✨ ${hebTitle.substring(0, 85)}\n💰 מחיר: *${price}*\n\n👇 לפרטים ורכישה:\n${url}`;
+            const message = `🛍️ *דיל מומלץ מאליאקספרס!* 🛍️\n\n✨ ${hebTitle.substring(0, 85)}\n💰 מחיר: *${price}*\n\n👇 לפרטים ורכישה:\n${url}`;
 
             await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, img, 'img.jpg', message);
+            console.log(`נשלח: ${hebTitle.substring(0, 20)}`);
             await new Promise(r => setTimeout(r, 4000));
         }
     } catch (error) {
