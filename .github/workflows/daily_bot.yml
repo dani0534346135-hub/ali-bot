@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install requests beautifulsoup4 lxml deep-translator
 
       - name: Run Bots
         env:
@@ -29,8 +29,6 @@ jobs:
           GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
           WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
           AMAZON_STORE_ID: ${{ secrets.AMAZON_STORE_ID }}
-          ADMITAD_CLIENT_ID: ${{ secrets.ADMITAD_CLIENT_ID }}
-          ADMITAD_CLIENT_SECRET: ${{ secrets.ADMITAD_CLIENT_SECRET }}
           ADMITAD_BASE64: ${{ secrets.ADMITAD_BASE64 }}
           ADMITAD_WEBSITE_ID: ${{ secrets.ADMITAD_WEBSITE_ID }}
         run: |
