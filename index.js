@@ -13,7 +13,12 @@ const restAPI = whatsAppClient.restAPI({
     apiTokenInstance: GREEN_TOKEN
 });
 
-const BANNED_KEYWORDS = ['part', 'replacement', 'repair', 'filter', 'mask', 'cushion', 'connector', 'valve', 'recoil', 'starter', 'screw'];
+// רשימת מילים של חלקי חילוף ושטויות
+const BANNED_KEYWORDS = [
+    'part', 'repair', 'replacement', 'gear', 'shaft', 'valve', 'pump', 'recoil', 
+    'connector', 'adapter', 'screw', 'oil', 'motor', 'carburetor', 'filter', 
+    'nozzle', 'seal', 'bearing', 'bracket', 'clutch', 'hose', 'tube'
+];
 
 async function shortenUrl(longUrl) {
     try {
@@ -24,19 +29,19 @@ async function shortenUrl(longUrl) {
 
 async function runAutomation() {
     try {
-        console.log("מושך 5 מוצרים מעניינים בשיטה מהירה...");
+        console.log("מחפש דילים שווים באמת...");
         
         const response = await axios({
             method: 'get',
             url: ADMITAD_FEED,
             responseType: 'stream',
-            headers: { 'Range': 'bytes=0-400000', 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'Range': 'bytes=0-800000', 'User-Agent': 'Mozilla/5.0' }
         });
 
         let data = '';
         for await (const chunk of response.data) {
             data += chunk;
-            if ((data.match(/<\/offer>/g) || []).length >= 15) { // מושכים 15 כדי שיהיה ממה לבחור
+            if ((data.match(/<\/offer>/g) || []).length >= 40) { // לוקחים 40 כדי שיהיה ממה לסנן
                 response.data.destroy();
                 break;
             }
@@ -47,20 +52,28 @@ async function runAutomation() {
         const result = await xml2js.parseStringPromise(data, { strict: false });
         let allOffers = result.YML_CATALOG.SHOP[0].OFFERS[0].OFFER;
 
-        // סינון זבל
+        // סינון חכם
         let filtered = allOffers.filter(o => {
             const name = (o.NAME ? o.NAME[0] : "").toLowerCase();
-            return !BANNED_KEYWORDS.some(word => name.includes(word)) && o.PICTURE;
+            const price = parseFloat(o.PRICE ? o.PRICE[0] : "0");
+            const hasImage = o.PICTURE && o.PICTURE[0];
+            
+            // הגנות: לא חלק חילוף וגם מחיר מעל 25 ש"ח (מסנן ברגים וצינורות)
+            const isNotBanned = !BANNED_KEYWORDS.some(word => name.includes(word));
+            const isExpensiveEnough = price >= 25; 
+
+            return isNotBanned && isExpensiveEnough && hasImage;
         });
 
-        // בחירת 5 אקראיים מהרשימה שסיננו
-        const selected = filtered.sort(() => 0.5 - Math.random()).slice(0, 5);
+        // אם לא מצאנו מספיק אחרי סינון, נוריד קצת את הרף
+        if (filtered.length < 5) filtered = allOffers.filter(o => o.PICTURE);
 
-        console.log(`שולח ${selected.length} מוצרים...`);
+        const selected = filtered.sort(() => 0.5 - Math.random()).slice(0, 5);
+        console.log(`נבחרו ${selected.length} מוצרים איכותיים.`);
 
         for (const product of selected) {
             const title = product.NAME[0];
-            const price = (product.PRICE ? product.PRICE[0] : "0") + "₪";
+            const price = product.PRICE[0] + "₪";
             const url = await shortenUrl(product.URL[0]);
             const img = product.PICTURE[0];
 
@@ -70,17 +83,13 @@ async function runAutomation() {
                 hebTitle = res.text;
             } catch (e) {}
 
-            const message = `🌟 *דיל שווה מאליאקספרס!* 🌟\n\n🛍️ ${hebTitle.substring(0, 80)}\n💰 מחיר: *${price}*\n\n👇 לרכישה:\n${url}`;
+            const message = `🌟 *דיל שווה מאליאקספרס!* 🌟\n\n🛍️ ${hebTitle.substring(0, 85)}\n💰 מחיר: *${price}*\n\n👇 לרכישה:\n${url}`;
 
             await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, img, 'img.jpg', message);
             await new Promise(r => setTimeout(r, 4000));
         }
-        console.log("✅ הסתיים בהצלחה!");
     } catch (error) {
-        if (!error.message.includes('destroyed')) {
-            console.error("שגיאה:", error.message);
-            process.exit(1);
-        }
+        if (!error.message.includes('destroyed')) console.error(error);
     }
 }
 runAutomation();
