@@ -2,8 +2,8 @@ name: AliBot Daily Send
 
 on:
   schedule:
-    - cron: '0 8 * * *'
-  workflow_dispatch: 
+    - cron: '0 8 * * *' # ירוץ כל יום ב-10 בבוקר שעון ישראל
+  workflow_dispatch: # מאפשר לך להריץ ידנית בלחיצת כפתור
 
 jobs:
   build:
@@ -25,12 +25,20 @@ jobs:
 
       - name: Run Bots
         env:
+          # משתנים עבור גרין API
           GREEN_API_ID: ${{ secrets.GREEN_API_ID }}
           GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
           WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
+          
+          # משתנים עבור אמזון
           AMAZON_STORE_ID: ${{ secrets.AMAZON_STORE_ID }}
-          ADMITAD_BASE64: ${{ secrets.ADMITAD_BASE64 }}
+          
+          # משתנים עבור אדמיטד (אלי אקספרס)
+          ADMITAD_CLIENT_ID: ${{ secrets.ADMITAD_CLIENT_ID }}
+          ADMITAD_CLIENT_SECRET: ${{ secrets.ADMITAD_CLIENT_SECRET }}
           ADMITAD_WEBSITE_ID: ${{ secrets.ADMITAD_WEBSITE_ID }}
         run: |
+          echo "Starting Amazon Bot..."
           python bot.py
+          echo "Starting AliExpress Bot..."
           python aliexpress_bot.py
