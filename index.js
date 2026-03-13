@@ -13,13 +13,15 @@ const restAPI = whatsAppClient.restAPI({
     apiTokenInstance: GREEN_TOKEN
 });
 
-// רשימת מילים לסינון "זבל" טכני
 const BANNED_KEYWORDS = [
-    'sensor', 'module', 'part', 'repair', 'replacement', 'gear', 'shaft', 'valve', 'pump',
-    'connector', 'adapter', 'screw', 'oil', 'motor', 'carburetor', 'filter', 'nozzle',
-    'brass', 'copper', 'rod', 'aluminum', 'bar', 'diamond', 'drill', 'pipe', 'welding',
-    'washer', 'ring', 'bolt', 'nut', 'relay', 'switch', 'cnc', 'lathe'
+    'part', 'repair', 'replacement', 'gear', 'shaft', 'valve', 'pump', 'connector', 
+    'adapter', 'screw', 'oil', 'motor', 'carburetor', 'filter', 'nozzle', 'brass', 
+    'copper', 'rod', 'aluminum', 'bar', 'diamond', 'drill', 'pipe', 'welding', 
+    'washer', 'ring', 'bolt', 'nut', 'relay', 'switch', 'cnc', 'lathe', 'sensor', 'module'
 ];
+
+// מילים שקשורות לבגדים כדי שנדע לא לשלוח יותר מדי מהם
+const CLOTHING_KEYWORDS = ['shirt', 't-shirt', 'polo', 'pants', 'trousers', 'dress', 'clothing', 'jacket', 'hoodie', 'socks'];
 
 async function shortenUrl(longUrl) {
     try {
@@ -30,19 +32,19 @@ async function shortenUrl(longUrl) {
 
 async function runAutomation() {
     try {
-        console.log("מחפש 5 דילים מגוונים ומעניינים...");
+        console.log("מחפש 5 דילים מגוונים (מלחמה בחולצות!)...");
         
         const response = await axios({
             method: 'get',
             url: ADMITAD_FEED,
             responseType: 'stream',
-            headers: { 'Range': 'bytes=0-8000000', 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'Range': 'bytes=0-10000000', 'User-Agent': 'Mozilla/5.0' } // 10MB למקסימום מבחר
         });
 
         let data = '';
         for await (const chunk of response.data) {
             data += chunk;
-            if ((data.match(/<\/offer>/g) || []).length >= 600) { 
+            if ((data.match(/<\/offer>/g) || []).length >= 800) { 
                 response.data.destroy();
                 break;
             }
@@ -53,7 +55,6 @@ async function runAutomation() {
         const result = await xml2js.parseStringPromise(data, { strict: false });
         let allOffers = result.YML_CATALOG.SHOP[0].OFFERS[0].OFFER;
 
-        // סינון בסיסי: מחיר מעל 25 ש"ח ובלי מילים אסורות
         let baseFiltered = allOffers.filter(o => {
             const name = (o.NAME ? o.NAME[0] : "").toLowerCase();
             const rawPrice = o.PRICE ? o.PRICE[0].toString() : "0";
@@ -62,36 +63,40 @@ async function runAutomation() {
             return isNotBanned && price >= 25 && o.PICTURE;
         });
 
-        // ערבוב הרשימה כדי להבטיח גיוון בכל הרצה
-        baseFiltered = baseFiltered.sort(() => 0.5 - Math.random());
+        // ערבוב אקראי חזק
+        baseFiltered = baseFiltered.sort(() => Math.random() - 0.5);
 
-        // בחירת 5 מוצרים - אנחנו נוודא שהם לא דומים מדי
         let selected = [];
-        let usedWords = new Set();
+        let clothingCount = 0;
 
         for (const product of baseFiltered) {
             if (selected.length >= 5) break;
             
             const title = product.NAME[0].toLowerCase();
-            // טריק למניעת כפילויות של אותה קטגוריה (למשל לא 5 חולצות)
-            const firstWord = title.split(' ')[0]; 
-            
-            if (!usedWords.has(firstWord)) {
-                selected.push(product);
-                usedWords.add(firstWord);
+            const isClothing = CLOTHING_KEYWORDS.some(word => title.includes(word));
+
+            // חוק הגיוון: לא יותר מחולצה/בגד אחד!
+            if (isClothing) {
+                if (clothingCount < 1) {
+                    selected.push(product);
+                    clothingCount++;
+                }
+                continue; // מדלג על שאר הבגדים
             }
+
+            selected.push(product);
         }
 
-        // אם לא מצאנו 5 "שונים", נשלים מהשאר
+        // אם עדיין אין 5 (כי היו רק בגדים), נאלץ לקחת מה שיש
         if (selected.length < 5) {
-            selected = selected.concat(baseFiltered.slice(0, 5 - selected.length));
+            selected = selected.concat(baseFiltered.filter(o => !selected.includes(o)).slice(0, 5 - selected.length));
         }
 
         console.log(`שולח ${selected.length} מוצרים מגוונים...`);
 
         for (const product of selected) {
             const title = product.NAME[0];
-            const price = product.PRICE[0] + "₪";
+            const price = (product.PRICE ? product.PRICE[0] : "0") + "₪";
             const url = await shortenUrl(product.URL[0]);
             const img = product.PICTURE[0];
 
