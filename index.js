@@ -13,18 +13,15 @@ const restAPI = whatsAppClient.restAPI({
     apiTokenInstance: GREEN_TOKEN
 });
 
-// מילים שאנחנו רוצים לראות (מילות מפתח חיוביות)
-const COOL_KEYWORDS = [
-    'smart', 'kitchen', 'home', 'led', 'lamp', 'gadget', 'wireless', 'bluetooth', 
-    'phone', 'watch', 'organizer', 'toy', 'car', 'decor', 'usb', 'portable'
-];
+// מילים חיוביות (בונוס)
+const COOL_KEYWORDS = ['smart', 'kitchen', 'home', 'led', 'lamp', 'gadget', 'wireless', 'phone', 'watch', 'toy', 'car', 'shirt', 'clothes', 'shoes', 'bag'];
 
-// מילים שאנחנו בורחים מהן (רשימה שחורה מורחבת)
+// רשימה שחורה (חובה לסנן)
 const BANNED_KEYWORDS = [
-    'sensor', 'module', 'part', 'replacement', 'gear', 'shaft', 'valve', 'pump',
-    'connector', 'adapter', 'screw', 'oil', 'motor', 'carburetor', 'filter',
-    'brass', 'copper', 'rod', 'aluminum', 'bit', 'drill', 'lathe', 'cnc', 'pipe',
-    'welding', 'washer', 'ring', 'bolt', 'nut', 'nozzle', 'switch', 'relay'
+    'sensor', 'module', 'part', 'repair', 'replacement', 'gear', 'shaft', 'valve', 'pump',
+    'connector', 'adapter', 'screw', 'oil', 'motor', 'carburetor', 'filter', 'nozzle',
+    'brass', 'copper', 'rod', 'aluminum', 'bar', 'diamond', 'drill', 'pipe', 'welding',
+    'washer', 'ring', 'bolt', 'nut', 'relay', 'switch', 'cnc', 'lathe'
 ];
 
 async function shortenUrl(longUrl) {
@@ -36,20 +33,21 @@ async function shortenUrl(longUrl) {
 
 async function runAutomation() {
     try {
-        console.log("מחפש 5 יהלומים מאליאקספרס...");
+        console.log("מתחיל סריקה עמוקה ל-5 מוצרים...");
         
-        // מורידים חלק גדול יותר (4MB) כדי שיהיה לנו מבחר אמיתי
+        // הגדלנו ל-6MB כדי למצוא מבחר גדול באמת
         const response = await axios({
             method: 'get',
             url: ADMITAD_FEED,
             responseType: 'stream',
-            headers: { 'Range': 'bytes=0-4000000', 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'Range': 'bytes=0-6000000', 'User-Agent': 'Mozilla/5.0' }
         });
 
         let data = '';
         for await (const chunk of response.data) {
             data += chunk;
-            if ((data.match(/<\/offer>/g) || []).length >= 250) { 
+            // אוספים עד 400 מוצרים כדי שיהיה ממה לבחור
+            if ((data.match(/<\/offer>/g) || []).length >= 400) { 
                 response.data.destroy();
                 break;
             }
@@ -60,27 +58,32 @@ async function runAutomation() {
         const result = await xml2js.parseStringPromise(data, { strict: false });
         let allOffers = result.YML_CATALOG.SHOP[0].OFFERS[0].OFFER;
 
-        // מנגנון סינון משולב
-        let filtered = allOffers.filter(o => {
+        // סינון ראשוני: מחיר מעל 20 ש"ח, יש תמונה, ולא "זבל"
+        let baseFiltered = allOffers.filter(o => {
             const name = (o.NAME ? o.NAME[0] : "").toLowerCase();
             const rawPrice = o.PRICE ? o.PRICE[0].toString() : "0";
             const price = parseFloat(rawPrice.replace(/[^\d.]/g, ''));
-            const hasImage = o.PICTURE && o.PICTURE[0];
-            
-            // 1. לא ברשימה השחורה
             const isNotBanned = !BANNED_KEYWORDS.some(word => name.includes(word));
-            // 2. מחיר הגיוני (מעל 20 ש"ח למניעת שטויות)
-            const isGoodPrice = price >= 20;
-            // 3. מכיל מילת מפתח "מעניינת" (אופציונלי אבל מועדף)
-            const isCool = COOL_KEYWORDS.some(word => name.includes(word));
-
-            return isNotBanned && isGoodPrice && hasImage && (isCool || name.length > 20);
+            return isNotBanned && price >= 20 && o.PICTURE;
         });
 
-        console.log(`סיננו ${filtered.length} מוצרים רלוונטיים.`);
+        // נתינת עדיפות למוצרים "מגניבים"
+        let coolProducts = baseFiltered.filter(o => {
+            const name = o.NAME[0].toLowerCase();
+            return COOL_KEYWORDS.some(word => name.includes(word));
+        });
 
-        // בחירת 5 אקראיים כדי שכל יום יהיה שונה
-        const selected = filtered.sort(() => 0.5 - Math.random()).slice(0, 5);
+        // אם אין מספיק "מגניבים", נשלים מהרשימה המסוננת הכללית
+        let finalSelection = coolProducts;
+        if (finalSelection.length < 5) {
+            const remaining = baseFiltered.filter(o => !coolProducts.includes(o));
+            finalSelection = finalSelection.concat(remaining.sort(() => 0.5 - Math.random()).slice(0, 5 - finalSelection.length));
+        }
+
+        // בחירת 5 סופיים ואקראיים מתוך מה שמצאנו
+        const selected = finalSelection.sort(() => 0.5 - Math.random()).slice(0, 5);
+
+        console.log(`שולח ${selected.length} מוצרים נבחרים...`);
 
         for (const product of selected) {
             const title = product.NAME[0];
@@ -95,10 +98,10 @@ async function runAutomation() {
                 if (hebTitle.length > 85) hebTitle = hebTitle.substring(0, 82) + "...";
             } catch (e) {}
 
-            const message = `🌟 *דיל שווה במיוחד!* 🌟\n\n🛍️ ${hebTitle}\n💰 מחיר: *${price}*\n\n👇 לפרטים ורכישה:\n${url}`;
+            const message = `🌟 *דיל שווה מאליאקספרס!* 🌟\n\n🛍️ ${hebTitle}\n💰 מחיר: *${price}*\n\n👇 לפרטים ורכישה:\n${url}`;
 
             await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, img, 'img.jpg', message);
-            await new Promise(r => setTimeout(r, 5000));
+            await new Promise(r => setTimeout(r, 4000));
         }
         
     } catch (error) {
