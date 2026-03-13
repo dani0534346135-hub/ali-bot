@@ -13,10 +13,7 @@ const restAPI = whatsAppClient.restAPI({
     apiTokenInstance: GREEN_TOKEN
 });
 
-// מילים חיוביות (בונוס)
-const COOL_KEYWORDS = ['smart', 'kitchen', 'home', 'led', 'lamp', 'gadget', 'wireless', 'phone', 'watch', 'toy', 'car', 'shirt', 'clothes', 'shoes', 'bag'];
-
-// רשימה שחורה (חובה לסנן)
+// רשימת מילים לסינון "זבל" טכני
 const BANNED_KEYWORDS = [
     'sensor', 'module', 'part', 'repair', 'replacement', 'gear', 'shaft', 'valve', 'pump',
     'connector', 'adapter', 'screw', 'oil', 'motor', 'carburetor', 'filter', 'nozzle',
@@ -33,21 +30,19 @@ async function shortenUrl(longUrl) {
 
 async function runAutomation() {
     try {
-        console.log("מתחיל סריקה עמוקה ל-5 מוצרים...");
+        console.log("מחפש 5 דילים מגוונים ומעניינים...");
         
-        // הגדלנו ל-6MB כדי למצוא מבחר גדול באמת
         const response = await axios({
             method: 'get',
             url: ADMITAD_FEED,
             responseType: 'stream',
-            headers: { 'Range': 'bytes=0-6000000', 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'Range': 'bytes=0-8000000', 'User-Agent': 'Mozilla/5.0' }
         });
 
         let data = '';
         for await (const chunk of response.data) {
             data += chunk;
-            // אוספים עד 400 מוצרים כדי שיהיה ממה לבחור
-            if ((data.match(/<\/offer>/g) || []).length >= 400) { 
+            if ((data.match(/<\/offer>/g) || []).length >= 600) { 
                 response.data.destroy();
                 break;
             }
@@ -58,36 +53,45 @@ async function runAutomation() {
         const result = await xml2js.parseStringPromise(data, { strict: false });
         let allOffers = result.YML_CATALOG.SHOP[0].OFFERS[0].OFFER;
 
-        // סינון ראשוני: מחיר מעל 20 ש"ח, יש תמונה, ולא "זבל"
+        // סינון בסיסי: מחיר מעל 25 ש"ח ובלי מילים אסורות
         let baseFiltered = allOffers.filter(o => {
             const name = (o.NAME ? o.NAME[0] : "").toLowerCase();
             const rawPrice = o.PRICE ? o.PRICE[0].toString() : "0";
             const price = parseFloat(rawPrice.replace(/[^\d.]/g, ''));
             const isNotBanned = !BANNED_KEYWORDS.some(word => name.includes(word));
-            return isNotBanned && price >= 20 && o.PICTURE;
+            return isNotBanned && price >= 25 && o.PICTURE;
         });
 
-        // נתינת עדיפות למוצרים "מגניבים"
-        let coolProducts = baseFiltered.filter(o => {
-            const name = o.NAME[0].toLowerCase();
-            return COOL_KEYWORDS.some(word => name.includes(word));
-        });
+        // ערבוב הרשימה כדי להבטיח גיוון בכל הרצה
+        baseFiltered = baseFiltered.sort(() => 0.5 - Math.random());
 
-        // אם אין מספיק "מגניבים", נשלים מהרשימה המסוננת הכללית
-        let finalSelection = coolProducts;
-        if (finalSelection.length < 5) {
-            const remaining = baseFiltered.filter(o => !coolProducts.includes(o));
-            finalSelection = finalSelection.concat(remaining.sort(() => 0.5 - Math.random()).slice(0, 5 - finalSelection.length));
+        // בחירת 5 מוצרים - אנחנו נוודא שהם לא דומים מדי
+        let selected = [];
+        let usedWords = new Set();
+
+        for (const product of baseFiltered) {
+            if (selected.length >= 5) break;
+            
+            const title = product.NAME[0].toLowerCase();
+            // טריק למניעת כפילויות של אותה קטגוריה (למשל לא 5 חולצות)
+            const firstWord = title.split(' ')[0]; 
+            
+            if (!usedWords.has(firstWord)) {
+                selected.push(product);
+                usedWords.add(firstWord);
+            }
         }
 
-        // בחירת 5 סופיים ואקראיים מתוך מה שמצאנו
-        const selected = finalSelection.sort(() => 0.5 - Math.random()).slice(0, 5);
+        // אם לא מצאנו 5 "שונים", נשלים מהשאר
+        if (selected.length < 5) {
+            selected = selected.concat(baseFiltered.slice(0, 5 - selected.length));
+        }
 
-        console.log(`שולח ${selected.length} מוצרים נבחרים...`);
+        console.log(`שולח ${selected.length} מוצרים מגוונים...`);
 
         for (const product of selected) {
             const title = product.NAME[0];
-            const price = (product.PRICE ? product.PRICE[0] : "0") + "₪";
+            const price = product.PRICE[0] + "₪";
             const url = await shortenUrl(product.URL[0]);
             const img = product.PICTURE[0];
 
@@ -98,14 +102,14 @@ async function runAutomation() {
                 if (hebTitle.length > 85) hebTitle = hebTitle.substring(0, 82) + "...";
             } catch (e) {}
 
-            const message = `🌟 *דיל שווה מאליאקספרס!* 🌟\n\n🛍️ ${hebTitle}\n💰 מחיר: *${price}*\n\n👇 לפרטים ורכישה:\n${url}`;
+            const message = `🔥 *דיל שווה מאליאקספרס!* 🔥\n\n🛍️ ${hebTitle}\n💰 מחיר: *${price}*\n\n👇 לפרטים ורכישה:\n${url}`;
 
             await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, img, 'img.jpg', message);
             await new Promise(r => setTimeout(r, 4000));
         }
         
     } catch (error) {
-        if (!error.message.includes('destroyed')) console.error("שגיאה:", error.message);
+        if (!error.message.includes('destroyed')) console.error(error);
     }
 }
 runAutomation();
