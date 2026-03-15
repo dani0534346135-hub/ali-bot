@@ -13,17 +13,19 @@ const restAPI = whatsAppClient.restAPI({
     apiTokenInstance: GREEN_TOKEN
 });
 
-// פוקוס מוחלט: רק כלי בית, מטבח ועיצוב
-const HOME_ONLY_KEYWORDS = [
-    'kitchen', 'cookware', 'baking', 'home decor', 'organizer', 'bathroom', 
-    'bedroom', 'lamp', 'furniture', 'cleaning', 'coffee', 'tableware', 'mug',
-    'shelf', 'storage', 'curtain', 'rug', 'towel', 'gadget home'
+// רשימת ה"כן" המוחלטת: בית, מטבח וצעצועים
+const ELITE_CATEGORIES = [
+    // מטבח ובית
+    'kitchen', 'baking', 'cookware', 'home decor', 'organizer', 'lamp', 'coffee', 'mug', 'storage',
+    // צעצועים וילדים
+    'toy', 'plush', 'doll', 'puzzle', 'lego', 'building blocks', 'remote control', 'rc car', 'baby', 'kids game'
 ];
 
-// חסימת כל מה שקשור לצינורות, חלקים וטכני
+// רשימת ה"לא" המוחלטת: למניעת חלקי חילוף וצינורות
 const TRASH_BLOCKER = [
     'pipe', 'hose', 'sensor', 'module', 'repair', 'part', 'connector', 'valve', 
-    'industrial', 'brass', 'copper', 'motor', 'pump', 'screw', 'drill', 'adapter'
+    'industrial', 'brass', 'copper', 'motor', 'pump', 'screw', 'drill', 'adapter',
+    'replacement', 'fitting', 'nozzle', 'wire', 'cable'
 ];
 
 async function shortenUrl(longUrl) {
@@ -35,19 +37,19 @@ async function shortenUrl(longUrl) {
 
 async function runAutomation() {
     try {
-        console.log("סורק מוצרים לבית ולמטבח בלבד...");
+        console.log("סורק דילים: בית, מטבח וצעצועים בלבד...");
         
         const response = await axios({
             method: 'get',
             url: ADMITAD_FEED,
             responseType: 'stream',
-            headers: { 'Range': 'bytes=0-25000000', 'User-Agent': 'Mozilla/5.0' } // 25MB סריקה עמוקה
+            headers: { 'Range': 'bytes=0-30000000', 'User-Agent': 'Mozilla/5.0' } // סריקה של 30MB למבחר מקסימלי
         });
 
         let data = '';
         for await (const chunk of response.data) {
             data += chunk;
-            if ((data.match(/<\/offer>/g) || []).length >= 2000) { // סורקים 2000 מוצרים!
+            if ((data.match(/<\/offer>/g) || []).length >= 2500) { 
                 response.data.destroy();
                 break;
             }
@@ -63,17 +65,18 @@ async function runAutomation() {
             const rawPrice = o.PRICE ? o.PRICE[0].toString() : "0";
             const price = parseFloat(rawPrice.replace(/[^\d.]/g, ''));
             
-            // האם זה מוצר לבית/מטבח?
-            const isHomeProduct = HOME_ONLY_KEYWORDS.some(word => name.includes(word));
-            // האם זה זבל טכני?
+            // סינון קטגוריות רצויות
+            const isTargetCategory = ELITE_CATEGORIES.some(word => name.includes(word));
+            // חסימת זבל טכני
             const isNotTrash = !TRASH_BLOCKER.some(word => name.includes(word));
             
-            return isHomeProduct && isNotTrash && price >= 25 && o.PICTURE;
+            // מחיר מינימום 25 ש"ח כדי להבטיח איכות
+            return isTargetCategory && isNotTrash && price >= 25 && o.PICTURE;
         });
 
-        console.log(`מצאנו ${filtered.length} מוצרים לבית ולמטבח.`);
+        console.log(`מצאנו ${filtered.length} מוצרים מעולים שעברו את הסינון.`);
 
-        // בחירת 5 אקראיים מהסינון האיכותי
+        // בחירת 5 אקראיים כדי שכל יום יהיה משהו חדש
         const selected = filtered.sort(() => Math.random() - 0.5).slice(0, 5);
 
         for (const product of selected) {
@@ -89,10 +92,10 @@ async function runAutomation() {
                 if (hebTitle.length > 85) hebTitle = hebTitle.substring(0, 82) + "...";
             } catch (e) {}
 
-            const message = `🏠 *דיל שווה לבית ולמטבח!* 🍳\n\n✨ ${hebTitle}\n💰 מחיר: *${price}*\n\n👇 לפרטים ורכישה:\n${url}`;
+            const message = `🌟 *דיל יומי נבחר!* 🌟\n\n✨ ${hebTitle}\n💰 מחיר: *${price}*\n\n👇 לפרטים ורכישה:\n${url}`;
 
             await restAPI.file.sendFileByUrl(WA_CHAT_ID, null, img, 'img.jpg', message);
-            await new Promise(r => setTimeout(r, 4000));
+            await new Promise(r => setTimeout(r, 5000));
         }
         
     } catch (error) {
