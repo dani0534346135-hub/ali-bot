@@ -1,10 +1,10 @@
-name: AliBot Daily Send
+name: AliBot Smart Scheduler
 
 on:
   schedule:
-    # כאן מגדירים את השעה. למשל: כל יום בשעה 08:00 בבוקר (זמן UTC)
-    - cron: '0 8 * * *'
-  workflow_dispatch: # מאפשר להפעיל את הבוט ידנית לניסיון
+    # ירוץ כל 3 שעות (בשעות: 09:00, 12:00, 15:00, 18:00, 21:00 שעון ישראל)
+    - cron: '0 6,9,12,15,18 * * *'
+  workflow_dispatch: # הפעלה ידנית לבדיקה
 
 jobs:
   build:
@@ -12,19 +12,29 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} # נותן לבוט אישור לעדכן את קובץ הזיכרון
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: pip install requests
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 lxml deep-translator
 
-      - name: Run Bot
+      - name: Run Bots
         env:
           GREEN_API_ID: ${{ secrets.GREEN_API_ID }}
           GREEN_API_TOKEN: ${{ secrets.GREEN_API_TOKEN }}
           WA_CHAT_ID: ${{ secrets.WA_CHAT_ID }}
-        run: python bot.py
+          AMAZON_STORE_ID: ${{ secrets.AMAZON_STORE_ID }}
+          ADMITAD_CLIENT_ID: ${{ secrets.ADMITAD_CLIENT_ID }}
+          ADMITAD_CLIENT_SECRET: ${{ secrets.ADMITAD_CLIENT_SECRET }}
+          ADMITAD_WEBSITE_ID: ${{ secrets.ADMITAD_WEBSITE_ID }}
+        run: |
+          python bot.py
+          python aliexpress_bot.py
